@@ -95,6 +95,7 @@ include(AzureVersion)
 
 # sub-projects
 add_subdirectory(sdk/core)
+add_subdirectory(sdk/attestation)
 add_subdirectory(sdk/identity)
 add_subdirectory(sdk/keyvault)
 add_subdirectory(sdk/storage)
