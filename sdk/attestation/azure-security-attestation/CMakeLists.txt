@@ -27,6 +27,8 @@ if(NOT AZ_ALL_LIBRARIES)
   endif()
 endif()
 
+add_subdirectory(src/private/crypto EXCLUDE_FROM_ALL)
+
 set(
   AZURE_ATTESTATION_HEADER
     inc/azure/attestation/dll_import_export.hpp
@@ -39,9 +41,6 @@ set(
     src/private/attestation_deserializer.hpp
     src/private/jsonwebkeyset.hpp 
     src/private/attestation_client_models_private.hpp
-    src/private/crypto/inc/crypto.hpp
-    src/private/crypto/inc/cryptocert.hpp
-    src/private/crypto/inc/cryptokeys.hpp
 )
 
 set(
@@ -54,29 +53,20 @@ set(
 
 add_library(azure-security-attestation ${AZURE_ATTESTATION_HEADER} ${AZURE_ATTESTATION_SOURCE})
 
-#if(WIN32)
-#    target_link_libraries(azure-core PRIVATE bcrypt crypt32)
-#else()
-    # Required for Hashing ( md5 and sha ).
-    find_package(OpenSSL REQUIRED)
-    target_link_libraries(azure-core PUBLIC OpenSSL::Crypto OpenSSL::SSL)
-#endif()
-add_subdirectory(src/private/crypto EXCLUDE_FROM_ALL)
-
 target_include_directories(
   azure-security-attestation
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc>
       $<INSTALL_INTERFACE:include>
-      # Disable dependency on azure-core until azure-core has released to vcpkg
-      # ${azure-core-cpp_INCLUDE_DIRS}
+      ${azure-core-cpp_INCLUDE_DIRS}
 )
-
-# Disable dependency on azure-core until azure-core has released to vcpkg
-target_link_libraries(azure-security-attestation PUBLIC Azure::azure-core)
 
 # make sure that users can consume the project as a library.
 add_library(Azure::azure-security-attestation ALIAS azure-security-attestation)
+
+# link openSSL from the crypto internal lib
+target_link_libraries(azure-security-attestation PRIVATE Azure::azure-core) 
+target_link_libraries(azure-security-attestation PRIVATE azure-security-attestation-crypto) 
 
 # coverage. Has no effect if BUILD_CODE_COVERAGE is OFF
 create_code_coverage(attestation azure-security-attestation azure-security-attestation-test "tests?/*;samples?/*")
@@ -84,17 +74,17 @@ create_code_coverage(attestation azure-security-attestation azure-security-attes
 get_az_version("${CMAKE_CURRENT_SOURCE_DIR}/src/private/package_version.hpp")
 generate_documentation(azure-security-attestation ${AZ_LIBRARY_VERSION})
 
-az_vcpkg_export(
-    azure-security-attestation
-    ATTESTATION
-    "azure/attestation/dll_import_export.hpp"
-  )
+# az_vcpkg_export(
+#     azure-security-attestation
+#     ATTESTATION
+#     "azure/attestation/dll_import_export.hpp"
+#   )
 
-az_rtti_setup(
-  azure-security-attestation
-  ATTESTATION
-  "azure/attestation/rtti.hpp"
-)
+# az_rtti_setup(
+#   azure-security-attestation
+#   ATTESTATION
+#   "azure/attestation/rtti.hpp"
+# )
 
 if(BUILD_TESTING)
     # tests

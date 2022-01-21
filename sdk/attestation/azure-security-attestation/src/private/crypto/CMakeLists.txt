@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: MIT
 
 cmake_minimum_required (VERSION 3.13)
-project(azure-security-attestation-crypto LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
@@ -39,7 +38,7 @@ add_library(azure-security-attestation-crypto ${CRYPTO_HEADER} ${CRYPTO_SOURCE})
 #else()
     # Required for Hashing ( md5 and sha ).
     find_package(OpenSSL REQUIRED)
-    target_link_libraries(azure-core PUBLIC OpenSSL::Crypto)
+    target_link_libraries(azure-security-attestation-crypto PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 #endif()
 
 target_include_directories(
@@ -50,6 +49,3 @@ target_include_directories(
 )
 
 target_link_libraries(azure-security-attestation-crypto PUBLIC Azure::azure-core)
-
-# make sure that users can consume the project as a library.
-#add_library(Azure::azure-security-attestation-crypto ALIAS azure-security-attestation-crypto)

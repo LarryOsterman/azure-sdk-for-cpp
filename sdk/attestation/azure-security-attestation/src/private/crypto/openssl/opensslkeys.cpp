@@ -8,8 +8,6 @@
  *
  */
 
-#pragma once
-
 #include <azure/core/internal/json/json.hpp>
 
 #include <azure/core/base64.hpp>
@@ -19,7 +17,7 @@
 #include <utility>
 #include <vector>
 
-#include "..\inc\crypto.hpp"
+#include "crypto.hpp"
 #include "opensslkeys.hpp"
 #include <openssl/bio.h>
 #include <openssl/err.h>
@@ -71,7 +69,6 @@ namespace Azure { namespace Security { namespace Attestation { namespace _privat
       }
       return std::string(returnValue.begin(), returnValue.end());
     }
-
 
     std::unique_ptr<AsymmetricKey> OpenSSLAsymmetricKey::ImportPublicKey(
         std::string const& pemEncodedKey)
