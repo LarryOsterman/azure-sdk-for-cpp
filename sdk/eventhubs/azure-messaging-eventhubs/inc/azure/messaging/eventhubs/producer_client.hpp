@@ -30,6 +30,10 @@ namespace Azure { namespace Messaging { namespace EventHubs {
      */
     Azure::Core::Http::Policies::RetryOptions RetryOptions{};
 
+    /** @brief Override value for server port if the EventHubs service is running on a non-standard
+     * port. */
+    std::uint16_t ServerPortOverride{};
+
     /**@brief  Message sender options.
      */
     Azure::Core::Amqp::_internal::MessageSenderOptions SenderOptions{};

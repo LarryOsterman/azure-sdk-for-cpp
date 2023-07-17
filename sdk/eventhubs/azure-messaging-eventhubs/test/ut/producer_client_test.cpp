@@ -118,6 +118,30 @@ TEST_F(ProducerClientTest, GetEventHubProperties_LIVEONLY_)
   EXPECT_TRUE(result.PartitionIDs.size() > 0);
 }
 
+TEST_F(ProducerClientTest, GetEventHubProperties_MOCK_)
+{
+  std::string const connStringEntityPath
+      = "Endpoint=sb://localhost/;SharedAccessKeyName=RootManagedSharedAccessKey;SharedAccessKey=DummyKey";
+
+  Azure::Messaging::EventHubs::ProducerClientOptions producerOptions;
+  producerOptions.ServerPortOverride = 5000;
+  producerOptions.SenderOptions.Name = "sender-link";
+  producerOptions.SenderOptions.EnableTrace = true;
+  producerOptions.SenderOptions.MessageSource = "ingress";
+  producerOptions.SenderOptions.SettleMode
+      = Azure::Core::Amqp::_internal::SenderSettleMode::Settled;
+  producerOptions.SenderOptions.MaxMessageSize = std::numeric_limits<uint16_t>::max();
+  producerOptions.ApplicationID = "some";
+
+  auto client = Azure::Messaging::EventHubs::ProducerClient(
+      connStringEntityPath, "eventhub", producerOptions);
+
+  auto result = client.GetEventHubProperties();
+  EXPECT_EQ(result.Name, "eventhub");
+  EXPECT_TRUE(result.PartitionIDs.size() > 0);
+}
+
+
 TEST_F(ProducerClientTest, GetPartitionProperties_LIVEONLY_)
 {
   std::string const connStringEntityPath

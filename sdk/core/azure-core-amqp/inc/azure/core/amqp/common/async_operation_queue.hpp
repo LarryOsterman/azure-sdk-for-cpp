@@ -72,6 +72,15 @@ namespace Azure { namespace Core { namespace Amqp { namespace Common { namespace
       m_operationQueue.clear();
     }
 
+    /**
+     * @brief Returns true if the queue is empty.
+     */
+    bool Empty()
+    {
+      std::unique_lock<std::mutex> lock(m_operationComplete);
+      return m_operationQueue.empty();
+    }
+
   private:
     std::mutex m_operationComplete;
     std::condition_variable m_operationCondition;

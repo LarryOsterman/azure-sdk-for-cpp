@@ -98,7 +98,7 @@ namespace Azure { namespace Core { namespace Amqp { namespace Tests {
           MessageLinkComponents const&,
           Azure::Core::Amqp::Models::AmqpMessage const&) const {};
 
-      virtual void MessageLoop(
+       void MessageLoop(
           std::string const& nodeName,
           MessageLinkComponents const& linkComponents)
       {

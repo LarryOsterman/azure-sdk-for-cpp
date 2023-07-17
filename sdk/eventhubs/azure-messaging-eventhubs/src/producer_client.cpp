@@ -55,6 +55,10 @@ void Azure::Messaging::EventHubs::ProducerClient::CreateSender(std::string const
   Azure::Core::Amqp::_internal::ConnectionOptions connectOptions;
   connectOptions.ContainerId = m_producerClientOptions.ApplicationID;
   connectOptions.EnableTrace = m_producerClientOptions.SenderOptions.EnableTrace;
+  if (m_producerClientOptions.ServerPortOverride != 0)
+  {
+    connectOptions.Port = m_producerClientOptions.ServerPortOverride;
+  }
   std::string hostName;
   hostName = m_fullyQualifiedNamespace;
 
