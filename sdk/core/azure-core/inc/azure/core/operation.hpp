@@ -173,7 +173,7 @@ namespace Azure { namespace Core {
     /**
      * @brief Gets updated status of the long-running operation.
      *
-     * @return An HTTP #Azure::Core::Http::RawResponse returned from the service.
+     * @return An HTTP #Azure::Core::Http::RawResponse returned from the service. 
      */
     Http::RawResponse const& Poll()
     {

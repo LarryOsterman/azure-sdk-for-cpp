@@ -117,6 +117,15 @@ namespace Azure { namespace Core {
       {
       }
 
+      explicit ContextSharedState(const std::shared_ptr<ContextSharedState>& parent)
+          : Parent(parent), Deadline(ToDateTimeRepresentation((DateTime::max)())), Value(nullptr)
+#if defined(AZ_CORE_RTTI)
+            ,
+            ValueType(typeid(std::nullptr_t))
+#endif
+      {
+      }
+
       template <class T>
       explicit ContextSharedState(
           const std::shared_ptr<ContextSharedState>& parent,
@@ -145,7 +154,26 @@ namespace Azure { namespace Core {
      * @brief Constructs a new context with no deadline, and no value associated.
      *
      */
-    Context() : m_contextSharedState(std::make_shared<ContextSharedState>()) {}
+    Context()
+        : m_contextSharedState(
+            std::make_shared<ContextSharedState>(ApplicationContext.m_contextSharedState))
+    {
+    }
+
+    Context(Context const& other)
+        : m_contextSharedState{std::make_shared<ContextSharedState>(other.m_contextSharedState)}
+    {
+    }
+
+    Context& operator=(Context const& other)
+    {
+      m_contextSharedState = std::make_shared<ContextSharedState>(other.m_contextSharedState);
+      return *this;
+    }
+
+    Context(Context&& other) = default;
+    Context& operator=(Context&& other) = default;
+    ~Context() = default;
 
     /**
      * @brief Creates a context with a deadline.
@@ -218,6 +246,9 @@ namespace Azure { namespace Core {
 
     /**
      * @brief Cancels the context.
+     *
+     * @note Canceling a context terminates any current operations on the context and all subsequent
+     * operations which use this context.
      *
      */
     void Cancel()

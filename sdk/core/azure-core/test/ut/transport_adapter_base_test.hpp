@@ -70,6 +70,7 @@ namespace Azure { namespace Core { namespace Test {
       op.Transport = GetParam().TransportAdapter;
       m_pipeline = std::make_unique<Azure::Core::Http::_internal::HttpPipeline>(
           op, "TransportTest", "X.X", std::move(retryPolicies), std::move(policies));
+
     }
 
     static void CheckBodyFromBuffer(

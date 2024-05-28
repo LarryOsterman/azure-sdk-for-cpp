@@ -6,14 +6,6 @@
 
 #if defined(AZ_PLATFORM_POSIX)
 #include <fcntl.h>
-#elif defined(AZ_PLATFORM_WINDOWS)
-#if !defined(WIN32_LEAN_AND_MEAN)
-#define WIN32_LEAN_AND_MEAN
-#endif
-#if !defined(NOMINMAX)
-#define NOMINMAX
-#endif
-#include <windows.h>
 #endif
 
 #include "transport_adapter_base_test.hpp"
@@ -146,6 +138,12 @@ namespace Azure { namespace Core { namespace Test {
     auto request
         = Azure::Core::Http::Request(Azure::Core::Http::HttpMethod::Patch, host, &bodyRequest);
     auto response = m_pipeline->Send(request, Azure::Core::Context::ApplicationContext);
+    if (response->GetStatusCode() != Http::HttpStatusCode::Ok)
+    {
+      // Patch is not supported by the server, so we should get a 405 Method Not Allowed
+      EXPECT_EQ(response->GetStatusCode(), Http::HttpStatusCode::MethodNotAllowed);
+	
+    }
     checkResponseCode(response->GetStatusCode());
 
     auto expectedResponseBodySize = std::stoull(response->GetHeaders().at("content-length"));
