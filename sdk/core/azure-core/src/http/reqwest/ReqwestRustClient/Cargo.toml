@@ -1,0 +1,25 @@
+lib = {crate-type = ["staticlib"]}
+[package]
+name = "rust_http"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+http-types = { version = "*", default-features = false}
+azure_core = "*"
+reqwest = { version = "*", features = ["json", "blocking", "stream"] }
+futures-core = "*"
+http = "*"
+url = "*"
+futures = "*"
+tokio = {version = "*", features = ["full"]}
+bytes = "*"
+env_logger="*"
+log = "*"
+
+
+[build-dependencies]
+cbindgen = "*"

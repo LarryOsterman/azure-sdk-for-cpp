@@ -313,6 +313,15 @@
       }
     },
     {
+      "name": "reqwest-transport",
+      "displayName": "Enable Reqwest Transport",
+      "description": "Enable Reqwest Transport (Hidden)",
+      "hidden": true,
+      "cacheVariables": {
+        "BUILD_TRANSPORT_REQWEST": true
+      }
+    },
+    {
       "name": "enable-address-sanitizer",
       "displayName": "Enable Address Sanitizer",
       "description": "Enable Address Sanitizer (Hidden). Note: ASAN can be extremely disruptive, when enabling ASAN, make sure you run your application under the debugger.",
@@ -468,7 +477,8 @@
         "enable-samples",
         "enable-perf",
         "winhttp-transport",
-        "curl-transport"
+        "curl-transport",
+        "reqwest-transport"
       ]
     },
     {

@@ -57,11 +57,17 @@ if(BUILD_TRANSPORT_WINHTTP)
     inc/azure/core/http/win_http_transport.hpp
   )
 endif()
+if(BUILD_TRANSPORT_REQWEST)
+  SET(REQWEST_TRANSPORT_ADAPTER_INC 
+	inc/azure/core/http/reqwest_transport.hpp
+  )
+endif()
 
 set(
   AZURE_CORE_HEADER
     ${CURL_TRANSPORT_ADAPTER_INC}
     ${WIN_TRANSPORT_ADAPTER_INC}
+    ${REQWEST_TRANSPORT_ADAPTER_INC}
     inc/azure/core.hpp
     inc/azure/core/azure_assert.hpp
     inc/azure/core/base64.hpp
@@ -160,6 +166,10 @@ target_include_directories(
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc>
       $<INSTALL_INTERFACE:include>
 )
+
+if(BUILD_TRANSPORT_REQWEST)
+add_subdirectory(src/http/reqwest)
+endif()
 
 # make sure that users can consume the project as a library.
 add_library(Azure::azure-core ALIAS azure-core)
