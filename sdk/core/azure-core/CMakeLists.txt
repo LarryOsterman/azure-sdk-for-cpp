@@ -57,11 +57,17 @@ if(BUILD_TRANSPORT_WINHTTP)
     inc/azure/core/http/win_http_transport.hpp
   )
 endif()
+if(BUILD_TRANSPORT_REQWEST)
+  SET(REQWEST_TRANSPORT_ADAPTER_INC 
+	inc/azure/core/http/reqwest_transport.hpp
+  )
+endif()
 
 set(
   AZURE_CORE_HEADER
     ${CURL_TRANSPORT_ADAPTER_INC}
     ${WIN_TRANSPORT_ADAPTER_INC}
+    ${REQWEST_TRANSPORT_ADAPTER_INC}
     inc/azure/core.hpp
     inc/azure/core/azure_assert.hpp
     inc/azure/core/base64.hpp

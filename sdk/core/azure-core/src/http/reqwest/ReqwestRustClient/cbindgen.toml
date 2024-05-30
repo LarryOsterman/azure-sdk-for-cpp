@@ -1,0 +1,67 @@
+# This is a template cbindgen.toml file with all of the default values.
+# Some values are commented out because their absence is the real default.
+#
+# See https://github.com/mozilla/cbindgen/blob/master/docs.md#cbindgentoml
+# for detailed documentation of every option here.
+
+
+
+language = "C++"
+
+header = """/* Copyright (c) Microsoft Corp. All Rights Reserved.
+ * MIT License. */"""
+autogen_warning = """/* 
+ * DO NOT MODIFY THIS MANUALLY! This file was generated using cbindgen.
+ */"""
+include_version = true
+braces = "SameLine"
+line_length = 100
+tab_width = 2
+namespaces = ["ffi"]
+
+[export]
+#item_types = ["globals", "enums", "structs", "unions", "typedefs", "opaque", "functions", "constants"]
+include = []
+exclude = []
+# prefix = "CAPI_"
+item_types = []
+renaming_overrides_prefixing = false
+
+
+
+[export.rename]
+
+
+
+[export.body]
+
+
+[export.mangle]
+
+
+[parse]
+parse_deps = true
+
+[fn]
+args = "Vertical"
+rename_args = "GeckoCase"
+
+[struct]
+associated_constants_in_body = true
+derive_eq = true
+derive_ostream = true
+
+[enum]
+add_sentinel = true
+derive_helper_methods = true
+derive_ostream = true
+
+[macro_expansion]
+bitflags = true
+
+[defines]
+"target_os = windows" = "XP_WIN"
+"target_os = macos" = "XP_MACOSX"
+"target_os = android" = "ANDROID"
+
+
