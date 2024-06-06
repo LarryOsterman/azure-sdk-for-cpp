@@ -402,12 +402,6 @@ namespace Azure { namespace Core { namespace Http { namespace RustTransport {
           contentLength);
     }
 
-    // Read bytes from the body up to size.
-    uint64_t ReadBodyBytes(
-        _detail::RustInterop::RuntimeContext const* runtimeContext,
-        uint8_t* buffer,
-        size_t size);
-
   private:
     _detail::AutoRustRawResponse m_response;
     uint64_t m_contentLength{0};

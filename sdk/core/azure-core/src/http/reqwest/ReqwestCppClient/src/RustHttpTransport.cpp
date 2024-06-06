@@ -2,7 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license
 // information.
 
-#include "reqwest_transport.hpp"
+#include "azure/core/http/reqwest_transport.hpp"
 
 #include <utility>
 
@@ -53,14 +53,6 @@ namespace Azure { namespace Core { namespace Http { namespace RustTransport {
     m_remainingBytes -= readSize;
     m_currentOffset += readSize;
     return readSize;
-  }
-
-  size_t RustHttpResponse::ReadBodyBytes(
-      _detail::RustInterop::RuntimeContext const* runtimeContext,
-      uint8_t* buffer,
-      size_t count)
-  {
-    return -1;
   }
 
   namespace _detail {
