@@ -56,7 +56,7 @@ namespace Azure { namespace Core { namespace Test {
       Test,
       TransportAdapter,
       testing::Values(
-          GetTransportOptions("rust", std::make_shared<Azure::Core::Http::ReqwestHttpTransport>()),
+          GetTransportOptions("rust", std::make_shared<Azure::Core::Http::RustTransport::ReqwestHttpTransport>())),
       GetSuffix);
 
 #elif defined(BUILD_TRANSPORT_WINHTTP_ADAPTER) && defined(BUILD_CURL_HTTP_TRANSPORT_ADAPTER)
