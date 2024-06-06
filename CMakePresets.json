@@ -612,16 +612,16 @@
       }
     },
     {
-      "name": "linux-basic-clang-13",
-      "displayName": "Linux clang-13",
-      "description": "Using compilers: C = /usr/bin/clang-13, CXX = /usr/bin/clang++-13",
+      "name": "linux-basic-clang",
+      "displayName": "Linux clang",
+      "description": "Using compilers: C = /usr/bin/clang, CXX = /usr/bin/clang++",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "generator": "Ninja",
       "hidden": true,
       "cacheVariables": {
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
-        "CMAKE_C_COMPILER": "/usr/bin/clang-13",
-        "CMAKE_CXX_COMPILER": "/usr/bin/clang++-13"
+        "CMAKE_C_COMPILER": "/usr/bin/clang",
+        "CMAKE_CXX_COMPILER": "/usr/bin/clang++"
       },
       "condition": {
         "type": "equals",
@@ -703,18 +703,19 @@
       "inherits": [ "linux-basic-clang-11", "debug-build", "enable-tests" ]
     },
     {
-      "name": "linux-clang-13-debug",
-      "inherits": [ "linux-basic-clang-13", "debug-build" ],
-      "displayName": "Linux clang 13 Debug"
+      "name": "linux-clang-debug",
+      "inherits": [ "linux-basic-clang", "debug-build" ],
+      "displayName": "Linux clang Debug"
     },
     {
-      "name": "linux-clang-13-debug-tests",
+      "name": "linux-clang-debug-tests",
       "inherits": [
-        "linux-basic-clang-13",
+        "linux-basic-clang",
         "debug-build",
+        "reqwest-transport",
         "enable-tests"
       ],
-      "displayName": "Linux clang 13 Debug+Tests"
+      "displayName": "Linux clang Debug+Tests"
     },
     {
       "name": "linux-g++-debug",

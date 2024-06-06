@@ -14,6 +14,10 @@
 #include "azure/core/http/win_http_transport.hpp"
 #endif
 
+#if defined(BUILD_REQWEST_HTTP_TRANSPORT_ADAPTER)
+#include "azure/core/http/reqwest_transport.hpp"
+#endif
+
 #include <string>
 
 using testing::ValuesIn;
@@ -47,7 +51,15 @@ namespace Azure { namespace Core { namespace Test {
    * MSVC does not support adding the pre-processor `#if` condition inside the MACRO parameters,
    * this is why we need to duplicate each case based on the transport adapters built.
    */
-#if defined(BUILD_TRANSPORT_WINHTTP_ADAPTER) && defined(BUILD_CURL_HTTP_TRANSPORT_ADAPTER)
+#if defined(BUILD_REQWEST_HTTP_TRANSPORT_ADAPTER)
+  INSTANTIATE_TEST_SUITE_P(
+      Test,
+      TransportAdapter,
+      testing::Values(
+          GetTransportOptions("rust", std::make_shared<Azure::Core::Http::ReqwestHttpTransport>()),
+      GetSuffix);
+
+#elif defined(BUILD_TRANSPORT_WINHTTP_ADAPTER) && defined(BUILD_CURL_HTTP_TRANSPORT_ADAPTER)
   /* WinHTTP + libcurl */
   INSTANTIATE_TEST_SUITE_P(
       Test,

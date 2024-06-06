@@ -11,7 +11,9 @@
 #include "azure/core/http/curl_transport.hpp"
 #endif
 
+#if defined(BUILD_TRANSPORT_WINHTTP_ADAPTER)
 #include "azure/core/http/win_http_transport.hpp"
+#endif
 
 #include <string>
 

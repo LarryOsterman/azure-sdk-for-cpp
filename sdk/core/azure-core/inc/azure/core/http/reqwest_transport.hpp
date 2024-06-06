@@ -318,8 +318,8 @@ namespace Azure { namespace Core { namespace Http { namespace RustTransport {
 
     RustHeaderIterator Headers()
     {
-      return std::move(RustHeaderIterator{_detail::AutoRustHeaderIterator{
-          _detail::RustInterop::request_get_headers(m_rustRequest.get())}});
+      return RustHeaderIterator{_detail::AutoRustHeaderIterator{
+          _detail::RustInterop::request_get_headers(m_rustRequest.get())}};
     }
 
   private:
