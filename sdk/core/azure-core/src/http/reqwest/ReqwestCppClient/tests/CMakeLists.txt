@@ -34,8 +34,16 @@ add_compile_definitions(AZURE_TEST_DATA_PATH="${CMAKE_BINARY_DIR}")
 
 add_dependencies(RustHttpTests RustHttpTransport)
 
+if(WIN32)
 target_link_libraries( RustHttpTests PRIVATE RustHttpTransport
 	GTest::gtest bcrypt.lib ws2_32.lib kernel32.lib userenv.lib ntdll.lib secur32.lib crypt32.lib ncrypt.lib Azure::azure-core )
+else()
+# The OpenSSL crate requires the native crypto and openssl version. So link the tests with the distributions OpenSSL libraries.
+find_package(OpenSSL REQUIRED)
+target_link_libraries( RustHttpTests PRIVATE RustHttpTransport
+	GTest::gtest Azure::azure-core ssl crypto)
+endif()
+
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET RustHttpTests PROPERTY CXX_STANDARD 14)

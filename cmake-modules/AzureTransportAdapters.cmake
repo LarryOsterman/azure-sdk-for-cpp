@@ -30,6 +30,10 @@ else()
   # On Windows: Make sure to build WinHTTP either if it was user-requested or no transport was selected at all.
   # On POSIX: Make sure to build Curl either if it was user-requested or no transport was selected at all.
 
+  if (BUILD_TRANSPORT_REQWEST)
+    add_compile_definitions(BUILD_REQWEST_HTTP_TRANSPORT_ADAPTER)
+  endif()
+  
   if (WIN32 OR MINGW OR MSYS OR CYGWIN)
     if (BUILD_TRANSPORT_CURL)
       # Specified by user on CMake input Libcurl

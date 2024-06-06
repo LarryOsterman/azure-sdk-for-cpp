@@ -30,10 +30,15 @@ if (NOT ${RUST_EXISTS})
     message(STATUS "Downloading and installing Rust using rustup to ${RUSTUP_INIT_SCRIPT}")
     message(STATUS "Download URL: ${RUSTUP_URL}")
     # Download the "rustup-init" script
-    file(DOWNLOAD "${RUSTUP_URL}" "${RUSTUP_INIT_SCRIPT}"
-         EXPECTED_HASH SHA256=92535fbde0c7ce45dce7d58f853d89ab1f873d29f78e6d80382f76ca2d1984cf
-         SHOW_PROGRESS)
-
+    if(WIN32)
+        file(DOWNLOAD "${RUSTUP_URL}" "${RUSTUP_INIT_SCRIPT}"
+            EXPECTED_HASH SHA256=92535fbde0c7ce45dce7d58f853d89ab1f873d29f78e6d80382f76ca2d1984cf
+            SHOW_PROGRESS)
+    else()
+        file(DOWNLOAD "${RUSTUP_URL}" "${RUSTUP_INIT_SCRIPT}"
+             EXPECTED_HASH SHA256=32a680a84cf76014915b3f8aa44e3e40731f3af92cd45eb0fcc6264fd257c428
+             SHOW_PROGRESS)
+    endif()
     # Make the script executable
     file(COPY "${RUSTUP_INIT_SCRIPT}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
@@ -58,11 +63,11 @@ if (NOT ${RUST_EXISTS})
         execute_process(COMMAND "${CMAKE_CURRENT_BINARY_DIR}/rustup-init.sh" -y)
 
         set(ENV{PATH} "${_USER_HOME}/.cargo/bin:$ENV{PATH}")
-        set(Rust_COMPILER CACHE ${_USER_HOME}/.cargo/bin/rustc PARENT_SCOPE)
+        set(Rust_COMPILER ${_USER_HOME}/.cargo/bin/rustc PARENT_SCOPE)
     endif()
 else()
 	message(STATUS "Rust is already installed, skipping.")
-    set(Rust_COMPILER ${_USER_HOME}/.cargo/bin/${_CARGO_NAME} PARENT_SCOPE)
+    set(Rust_COMPILER ${_USER_HOME}/.cargo/bin/rustc PARENT_SCOPE)
     message(STATUS "Setting Rust Compiler to: ${Rust_COMPILER}")
     set(ENV{PATH} "${_USER_HOME}/.cargo/bin:$ENV{PATH}")
 endif()
