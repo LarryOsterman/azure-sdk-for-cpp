@@ -37,6 +37,9 @@ if(RUN_LONG_UNIT_TESTS)
   add_compile_definitions(RUN_LONG_UNIT_TESTS)
 endif()
 
+if (BUILD_TRANSPORT_REQWEST)
+target_link_libraries(azure-core-test PRIVATE RustHttpTransport)
+endif()
 include(GoogleTest)
 
 if (NOT WIN32)
