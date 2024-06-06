@@ -32,10 +32,6 @@ add_executable (RustHttpTests ${RUST_TEST_SOURCES})
 
 add_compile_definitions(AZURE_TEST_DATA_PATH="${CMAKE_BINARY_DIR}")
 
-
-#target_include_directories(RustHttpTests PRIVATE ${CMAKE_SOURCE_DIR}/include)
-#target_include_directories(RustHttpTests PRIVATE ${CMAKE_SOURCE_DIR}/rust_http)
-
 add_dependencies(RustHttpTests RustHttpTransport)
 
 target_link_libraries( RustHttpTests PRIVATE RustHttpTransport

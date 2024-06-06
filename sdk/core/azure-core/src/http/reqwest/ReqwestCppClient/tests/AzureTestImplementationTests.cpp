@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 #include "AzureTransportTests.hpp"
-#include "reqwest_transport.hpp"
+#include "azure/core/http/reqwest_transport.hpp"
 
 #include <azure/core/http/policies/policy.hpp>
 #include <azure/core/http/transport.hpp>
