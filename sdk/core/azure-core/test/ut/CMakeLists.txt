@@ -37,9 +37,6 @@ if(RUN_LONG_UNIT_TESTS)
   add_compile_definitions(RUN_LONG_UNIT_TESTS)
 endif()
 
-if (BUILD_TRANSPORT_REQWEST)
-target_link_libraries(azure-core-test PRIVATE RustHttpTransport)
-endif()
 include(GoogleTest)
 
 if (NOT WIN32)
@@ -149,6 +146,11 @@ add_custom_command(TARGET azure-core-test POST_BUILD
 target_include_directories (azure-core-test PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../src>)
 
 target_link_libraries(azure-core-test PRIVATE azure-core gtest gmock ${OPENSSLCRYPTO})
+
+if (BUILD_TRANSPORT_REQWEST)
+  target_link_libraries(azure-core-test PRIVATE RustHttpTransport Secur32 ncrypt)
+endif()
+
 
 create_map_file(azure-core-test azure-core-test.map)
 

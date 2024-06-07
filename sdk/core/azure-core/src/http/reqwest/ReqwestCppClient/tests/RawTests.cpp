@@ -3,7 +3,7 @@
 // information.
 
 #include "azure/core/http/reqwest_transport.hpp"
-
+#include "../ReqwestCppClient/src/private/reqwest_http_transport_private.hpp"
 #include <iostream>
 
 #include <gtest/gtest.h>
