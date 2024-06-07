@@ -3,6 +3,7 @@
 // information.
 
 #include "azure/core/http/reqwest_transport.hpp"
+#include "../ReqwestCppClient/src/private/reqwest_http_transport_private.hpp"
 
 #include <iostream>
 
@@ -43,7 +44,7 @@ TEST(RustHttpRequest, RawCreateRequest)
 
 TEST(RustHttpRequest, CreateRequestSimple)
 {
-  auto request = Azure::Core::Http::RustTransport::RustHttpRequest();
+  auto request = Azure::Core::Http::RustTransport::_detail::RustHttpRequest();
 
   request.SetMethod(Azure::Core::Http::HttpMethod::Get);
   request.SetHeader("Test1", "Value1");
@@ -53,7 +54,7 @@ TEST(RustHttpRequest, CreateRequestSimple)
 
 TEST(RustHttpRequest, EnumerateHeaders)
 {
-  auto request = Azure::Core::Http::RustTransport::RustHttpRequest();
+  auto request = Azure::Core::Http::RustTransport::_detail::RustHttpRequest();
 
   request.SetMethod(Azure::Core::Http::HttpMethod::Get);
   request.SetHeader("Test1", "Value1");
@@ -91,7 +92,7 @@ TEST(RustHttpRequest, FromAzureRequest)
       Azure::Core::Url("https://jsonplaceholder.typicode.com/todos/1"),
       true);
 
-  RustHttpRequest rustRequest{request, Azure::Core::Context{}};
+  _detail::RustHttpRequest rustRequest{request, Azure::Core::Context{}};
 
   auto rustRequestPtr = rustRequest.GetRustRequest();
   EXPECT_STREQ(request.GetMethod().ToString().c_str(), request_get_method(rustRequestPtr));

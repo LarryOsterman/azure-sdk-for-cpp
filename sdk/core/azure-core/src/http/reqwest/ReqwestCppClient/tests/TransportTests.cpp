@@ -3,6 +3,7 @@
 // information.
 
 #include "azure/core/http/reqwest_transport.hpp"
+#include "../ReqwestCppClient/src/private/reqwest_http_transport_private.hpp"
 
 #include <iostream>
 
@@ -17,7 +18,7 @@ TEST(RustTransport, GetSimple)
       Azure::Core::Url("https://jsonplaceholder.typicode.com/todos/1"));
   request.SetHeader("Content-Type", "application/json");
 
-  Azure::Core::Http::RustTransport::RustHttpTransport transport;
+  Azure::Core::Http::RustTransport::ReqwestHttpTransport transport;
 
   auto response = transport.Send(request, Azure::Core::Context());
 
@@ -37,7 +38,7 @@ TEST(RustTransport, MicrosoftRead)
       Azure::Core::Http::HttpMethod::Get,
       Azure::Core::Url("https://www.microsoft.com/index.htm"), false);
 
-    Azure::Core::Http::RustTransport::RustHttpTransport transport;
+    Azure::Core::Http::RustTransport::ReqwestHttpTransport transport;
 
   auto response = transport.Send(request, Azure::Core::Context());
 

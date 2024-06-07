@@ -2,6 +2,8 @@
 # project specific logic here.
 #
 
+project (RustHttpTransport LANGUAGES CXX)
+
 include (${CMAKE_SOURCE_DIR}/cmake-modules/acquire_rust.cmake)
 
 install_rustup()
@@ -15,6 +17,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Corrosion)
 
+message(STATUS "Project name: ${PROJECT_NAME}")
 
 # Import targets defined in a package or workspace manifest `Cargo.toml` file
 corrosion_import_crate(MANIFEST_PATH ${REQWEST_TRANSPORT_ROOT}/ReqwestRustClient/Cargo.toml)
