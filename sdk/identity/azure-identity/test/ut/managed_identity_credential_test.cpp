@@ -5,15 +5,32 @@
 #include "credential_test_helper.hpp"
 
 #include <azure/core/diagnostics/logger.hpp>
+#include <azure/core/internal/environment.hpp>
 
 #include <fstream>
 
 #include <gtest/gtest.h>
 
+#if defined(AZ_PLATFORM_LINUX)
+#include <unistd.h>
+
+#include <sys/stat.h> // for mkdir
+#include <sys/types.h>
+#elif defined(AZ_PLATFORM_WINDOWS)
+#if !defined(WIN32_LEAN_AND_MEAN)
+#define WIN32_LEAN_AND_MEAN
+#endif
+#if !defined(NOMINMAX)
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 using Azure::Core::Credentials::TokenCredentialOptions;
 using Azure::Core::Http::HttpMethod;
 using Azure::Core::Http::HttpStatusCode;
 using Azure::Identity::ManagedIdentityCredential;
+using Azure::Identity::ResourceIdentifier;
 using Azure::Identity::Test::_detail::CredentialTestHelper;
 
 TEST(ManagedIdentityCredential, GetCredentialName)
@@ -193,6 +210,96 @@ TEST(ManagedIdentityCredential, AppServiceV2019ClientId)
       "https://visualstudio.com"
       "?api-version=2019-08-01"
       "&client_id=fedcba98-7654-3210-0123-456789abcdef");
+
+  EXPECT_TRUE(request0.Body.empty());
+  EXPECT_TRUE(request1.Body.empty());
+  EXPECT_TRUE(request2.Body.empty());
+
+  {
+    EXPECT_NE(request0.Headers.find("X-IDENTITY-HEADER"), request0.Headers.end());
+    EXPECT_EQ(request0.Headers.at("X-IDENTITY-HEADER"), "CLIENTSECRET2");
+
+    EXPECT_NE(request1.Headers.find("X-IDENTITY-HEADER"), request1.Headers.end());
+    EXPECT_EQ(request1.Headers.at("X-IDENTITY-HEADER"), "CLIENTSECRET2");
+
+    EXPECT_NE(request2.Headers.find("X-IDENTITY-HEADER"), request2.Headers.end());
+    EXPECT_EQ(request2.Headers.at("X-IDENTITY-HEADER"), "CLIENTSECRET2");
+  }
+
+  EXPECT_EQ(response0.AccessToken.Token, "ACCESSTOKEN1");
+  EXPECT_EQ(response1.AccessToken.Token, "ACCESSTOKEN2");
+  EXPECT_EQ(response2.AccessToken.Token, "ACCESSTOKEN3");
+
+  using namespace std::chrono_literals;
+  EXPECT_GE(response0.AccessToken.ExpiresOn, response0.EarliestExpiration + 3600s);
+  EXPECT_LE(response0.AccessToken.ExpiresOn, response0.LatestExpiration + 3600s);
+
+  EXPECT_GE(response1.AccessToken.ExpiresOn, response1.EarliestExpiration + 3600s);
+  EXPECT_LE(response1.AccessToken.ExpiresOn, response1.LatestExpiration + 3600s);
+
+  EXPECT_GE(response2.AccessToken.ExpiresOn, response2.EarliestExpiration + 4999s);
+  EXPECT_LE(response2.AccessToken.ExpiresOn, response2.LatestExpiration + 4999s);
+}
+
+TEST(ManagedIdentityCredential, AppServiceV2019ResourceId)
+{
+  auto const actual = CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", "https://microsoft.com/"},
+            {"MSI_SECRET", "CLIENTSECRET1"},
+            {"IDENTITY_ENDPOINT", "https://visualstudio.com/"},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", "CLIENTSECRET2"},
+            {"IDENTITY_SERVER_THUMBPRINT", "0123456789abcdef0123456789abcdef01234567"},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(
+            ResourceIdentifier("abcdef01-2345-6789-9876-543210fedcba"), options);
+      },
+      {{"https://azure.com/.default"}, {"https://outlook.com/.default"}, {}},
+      std::vector<std::string>{
+          "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}",
+          "{\"expires_in\":7200, \"access_token\":\"ACCESSTOKEN2\"}",
+          "{\"expires_in\":9999, \"access_token\":\"ACCESSTOKEN3\"}"});
+
+  EXPECT_EQ(actual.Requests.size(), 3U);
+  EXPECT_EQ(actual.Responses.size(), 3U);
+
+  auto const& request0 = actual.Requests.at(0);
+  auto const& request1 = actual.Requests.at(1);
+  auto const& request2 = actual.Requests.at(2);
+
+  auto const& response0 = actual.Responses.at(0);
+  auto const& response1 = actual.Responses.at(1);
+  auto const& response2 = actual.Responses.at(2);
+
+  EXPECT_EQ(request0.HttpMethod, HttpMethod::Get);
+  EXPECT_EQ(request1.HttpMethod, HttpMethod::Get);
+  EXPECT_EQ(request2.HttpMethod, HttpMethod::Get);
+
+  EXPECT_EQ(
+      request0.AbsoluteUrl,
+      "https://visualstudio.com"
+      "?api-version=2019-08-01"
+      "&mi_res_id=abcdef01-2345-6789-9876-543210fedcba"
+      "&resource=https%3A%2F%2Fazure.com"); // cspell:disable-line
+
+  EXPECT_EQ(
+      request1.AbsoluteUrl,
+      "https://visualstudio.com"
+      "?api-version=2019-08-01"
+      "&mi_res_id=abcdef01-2345-6789-9876-543210fedcba"
+      "&resource=https%3A%2F%2Foutlook.com"); // cspell:disable-line
+
+  EXPECT_EQ(
+      request2.AbsoluteUrl,
+      "https://visualstudio.com"
+      "?api-version=2019-08-01"
+      "&mi_res_id=abcdef01-2345-6789-9876-543210fedcba");
 
   EXPECT_TRUE(request0.Body.empty());
   EXPECT_TRUE(request1.Body.empty());
@@ -506,6 +613,96 @@ TEST(ManagedIdentityCredential, AppServiceV2017ClientId)
   EXPECT_LE(response2.AccessToken.ExpiresOn, response2.LatestExpiration + 4999s);
 }
 
+TEST(ManagedIdentityCredential, AppServiceV2017ResourceId)
+{
+  auto const actual = CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", "https://microsoft.com/"},
+            {"MSI_SECRET", "CLIENTSECRET1"},
+            {"IDENTITY_ENDPOINT", ""},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", "CLIENTSECRET2"},
+            {"IDENTITY_SERVER_THUMBPRINT", "0123456789abcdef0123456789abcdef01234567"},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(
+            ResourceIdentifier("abcdef01-2345-6789-9876-543210fedcba"), options);
+      },
+      {{"https://azure.com/.default"}, {"https://outlook.com/.default"}, {}},
+      std::vector<std::string>{
+          "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}",
+          "{\"expires_in\":7200, \"access_token\":\"ACCESSTOKEN2\"}",
+          "{\"expires_in\":9999, \"access_token\":\"ACCESSTOKEN3\"}"});
+
+  EXPECT_EQ(actual.Requests.size(), 3U);
+  EXPECT_EQ(actual.Responses.size(), 3U);
+
+  auto const& request0 = actual.Requests.at(0);
+  auto const& request1 = actual.Requests.at(1);
+  auto const& request2 = actual.Requests.at(2);
+
+  auto const& response0 = actual.Responses.at(0);
+  auto const& response1 = actual.Responses.at(1);
+  auto const& response2 = actual.Responses.at(2);
+
+  EXPECT_EQ(request0.HttpMethod, HttpMethod::Get);
+  EXPECT_EQ(request1.HttpMethod, HttpMethod::Get);
+  EXPECT_EQ(request2.HttpMethod, HttpMethod::Get);
+
+  EXPECT_EQ(
+      request0.AbsoluteUrl,
+      "https://microsoft.com"
+      "?api-version=2017-09-01"
+      "&mi_res_id=abcdef01-2345-6789-9876-543210fedcba"
+      "&resource=https%3A%2F%2Fazure.com"); // cspell:disable-line
+
+  EXPECT_EQ(
+      request1.AbsoluteUrl,
+      "https://microsoft.com"
+      "?api-version=2017-09-01"
+      "&mi_res_id=abcdef01-2345-6789-9876-543210fedcba"
+      "&resource=https%3A%2F%2Foutlook.com"); // cspell:disable-line
+
+  EXPECT_EQ(
+      request2.AbsoluteUrl,
+      "https://microsoft.com"
+      "?api-version=2017-09-01"
+      "&mi_res_id=abcdef01-2345-6789-9876-543210fedcba");
+
+  EXPECT_TRUE(request0.Body.empty());
+  EXPECT_TRUE(request1.Body.empty());
+  EXPECT_TRUE(request2.Body.empty());
+
+  {
+    EXPECT_NE(request0.Headers.find("secret"), request0.Headers.end());
+    EXPECT_EQ(request0.Headers.at("secret"), "CLIENTSECRET1");
+
+    EXPECT_NE(request1.Headers.find("secret"), request1.Headers.end());
+    EXPECT_EQ(request1.Headers.at("secret"), "CLIENTSECRET1");
+
+    EXPECT_NE(request2.Headers.find("secret"), request2.Headers.end());
+    EXPECT_EQ(request2.Headers.at("secret"), "CLIENTSECRET1");
+  }
+
+  EXPECT_EQ(response0.AccessToken.Token, "ACCESSTOKEN1");
+  EXPECT_EQ(response1.AccessToken.Token, "ACCESSTOKEN2");
+  EXPECT_EQ(response2.AccessToken.Token, "ACCESSTOKEN3");
+
+  using namespace std::chrono_literals;
+  EXPECT_GE(response0.AccessToken.ExpiresOn, response0.EarliestExpiration + 3600s);
+  EXPECT_LE(response0.AccessToken.ExpiresOn, response0.LatestExpiration + 3600s);
+
+  EXPECT_GE(response1.AccessToken.ExpiresOn, response1.EarliestExpiration + 3600s);
+  EXPECT_LE(response1.AccessToken.ExpiresOn, response1.LatestExpiration + 3600s);
+
+  EXPECT_GE(response2.AccessToken.ExpiresOn, response2.EarliestExpiration + 4999s);
+  EXPECT_LE(response2.AccessToken.ExpiresOn, response2.LatestExpiration + 4999s);
+}
+
 TEST(ManagedIdentityCredential, AppServiceV2017InvalidUrl)
 {
   using Azure::Core::Credentials::AccessToken;
@@ -754,6 +951,84 @@ TEST(ManagedIdentityCredential, CloudShellClientId)
   EXPECT_LE(response2.AccessToken.ExpiresOn, response2.LatestExpiration + 4999s);
 }
 
+TEST(ManagedIdentityCredential, CloudShellResourceId)
+{
+  auto const actual = CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", "https://microsoft.com/"},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", "https://visualstudio.com/"},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", "0123456789abcdef0123456789abcdef01234567"},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(
+            ResourceIdentifier("abcdef01-2345-6789-9876-543210fedcba"), options);
+      },
+      {{"https://azure.com/.default"}, {"https://outlook.com/.default"}, {}},
+      std::vector<std::string>{
+          "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}",
+          "{\"expires_in\":7200, \"access_token\":\"ACCESSTOKEN2\"}",
+          "{\"expires_in\":9999, \"access_token\":\"ACCESSTOKEN3\"}"});
+
+  EXPECT_EQ(actual.Requests.size(), 3U);
+  EXPECT_EQ(actual.Responses.size(), 3U);
+
+  auto const& request0 = actual.Requests.at(0);
+  auto const& request1 = actual.Requests.at(1);
+  auto const& request2 = actual.Requests.at(2);
+
+  auto const& response0 = actual.Responses.at(0);
+  auto const& response1 = actual.Responses.at(1);
+  auto const& response2 = actual.Responses.at(2);
+
+  EXPECT_EQ(request0.HttpMethod, HttpMethod::Post);
+  EXPECT_EQ(request1.HttpMethod, HttpMethod::Post);
+  EXPECT_EQ(request2.HttpMethod, HttpMethod::Post);
+
+  EXPECT_EQ(request0.AbsoluteUrl, "https://microsoft.com");
+  EXPECT_EQ(request1.AbsoluteUrl, "https://microsoft.com");
+  EXPECT_EQ(request2.AbsoluteUrl, "https://microsoft.com");
+
+  EXPECT_EQ(request0.Body,
+            "resource=https%3A%2F%2Fazure.com"); // cspell:disable-line
+
+  EXPECT_EQ(request1.Body,
+            "resource=https%3A%2F%2Foutlook.com"); // cspell:disable-line
+
+  EXPECT_EQ(request2.Body, "");
+
+  {
+    EXPECT_NE(request0.Headers.find("Metadata"), request0.Headers.end());
+    EXPECT_EQ(request0.Headers.at("Metadata"), "true");
+
+    EXPECT_NE(request1.Headers.find("Metadata"), request1.Headers.end());
+    EXPECT_EQ(request1.Headers.at("Metadata"), "true");
+
+    EXPECT_NE(request2.Headers.find("Metadata"), request2.Headers.end());
+    EXPECT_EQ(request2.Headers.at("Metadata"), "true");
+  }
+
+  EXPECT_EQ(response0.AccessToken.Token, "ACCESSTOKEN1");
+  EXPECT_EQ(response1.AccessToken.Token, "ACCESSTOKEN2");
+  EXPECT_EQ(response2.AccessToken.Token, "ACCESSTOKEN3");
+
+  using namespace std::chrono_literals;
+  EXPECT_GE(response0.AccessToken.ExpiresOn, response0.EarliestExpiration + 3600s);
+  EXPECT_LE(response0.AccessToken.ExpiresOn, response0.LatestExpiration + 3600s);
+
+  EXPECT_GE(response1.AccessToken.ExpiresOn, response1.EarliestExpiration + 3600s);
+  EXPECT_LE(response1.AccessToken.ExpiresOn, response1.LatestExpiration + 3600s);
+
+  EXPECT_GE(response2.AccessToken.ExpiresOn, response2.EarliestExpiration + 4999s);
+  EXPECT_LE(response2.AccessToken.ExpiresOn, response2.LatestExpiration + 4999s);
+}
+
 TEST(ManagedIdentityCredential, CloudShellInvalidUrl)
 {
   using Azure::Core::Credentials::AccessToken;
@@ -785,6 +1060,58 @@ TEST(ManagedIdentityCredential, CloudShellInvalidUrl)
       {"{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}"}));
 }
 
+// This helper creates the necessary directories required for the Azure Arc tests, and returns where
+// we expect the valid arc key to exist.
+std::string CreateDirectoryAndGetKeyPath()
+{
+  std::string keyPath;
+#if defined(AZ_PLATFORM_LINUX)
+  keyPath = "/var/opt/azcmagent/tokens";
+  int result = system(std::string("sudo mkdir -p ").append(keyPath).c_str());
+  if (result != 0 && errno != EEXIST)
+  {
+    GTEST_LOG_(ERROR) << "Directory creation failure in an AzureArc test: " << keyPath
+                      << " Result: " << result << " Error : " << errno;
+    EXPECT_TRUE(false);
+  }
+  // Add write permission for owner, group, and others
+  result = system(std::string("sudo chmod -R 0777 ").append(keyPath).c_str());
+  if (result != 0)
+  {
+    GTEST_LOG_(ERROR) << "Failed to change permissions for " << keyPath << ": " << strerror(errno)
+                      << std::endl;
+    EXPECT_TRUE(false);
+  }
+  keyPath += "/";
+#elif defined(AZ_PLATFORM_WINDOWS)
+  keyPath = Azure::Core::_internal::Environment::GetVariable("ProgramData");
+  if (keyPath.empty())
+  {
+    GTEST_LOG_(ERROR) << "We can't get ProgramData folder path in an AzureArc test.";
+    EXPECT_TRUE(false);
+  }
+  // Unlike linux, we can't use mkdir on Windows, since it is deprecated. We will use
+  // CreateDirectory instead.
+  // https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/mkdir?view=msvc-170
+  keyPath += "\\AzureConnectedMachineAgent";
+  if (!CreateDirectory(keyPath.c_str(), NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
+  {
+    GTEST_LOG_(ERROR) << "Directory creation failure in an AzureArc test: " << keyPath
+                      << " Error: " << GetLastError();
+    EXPECT_TRUE(false);
+  }
+  keyPath += "\\Tokens";
+  if (!CreateDirectory(keyPath.c_str(), NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
+  {
+    GTEST_LOG_(ERROR) << "Directory creation failure in an an AzureArc test: " << keyPath
+                      << " Error: " << GetLastError();
+    EXPECT_TRUE(false);
+  }
+  keyPath += "\\";
+#endif
+  return keyPath;
+}
+
 TEST(ManagedIdentityCredential, AzureArc)
 {
   using Azure::Core::Diagnostics::Logger;
@@ -793,23 +1120,32 @@ TEST(ManagedIdentityCredential, AzureArc)
   Logger::SetLevel(Logger::Level::Verbose);
   Logger::SetListener([&](auto lvl, auto msg) { log.push_back(std::make_pair(lvl, msg)); });
 
+  std::string keyPath = CreateDirectoryAndGetKeyPath();
+  if (keyPath.empty())
+  {
+    GTEST_SKIP_("Skipping AzureArc test on unsupported OSes.");
+  }
+
   {
     std::ofstream secretFile(
-        "managed_identity_credential_test1.txt", std::ios_base::out | std::ios_base::trunc);
+        keyPath + "managed_identity_credential_test1.key",
+        std::ios_base::out | std::ios_base::trunc);
 
     secretFile << "SECRET1";
   }
 
   {
     std::ofstream secretFile(
-        "managed_identity_credential_test2.txt", std::ios_base::out | std::ios_base::trunc);
+        keyPath + "managed_identity_credential_test2.key",
+        std::ios_base::out | std::ios_base::trunc);
 
     secretFile << "SECRET2";
   }
 
   {
     std::ofstream secretFile(
-        "managed_identity_credential_test3.txt", std::ios_base::out | std::ios_base::trunc);
+        keyPath + "managed_identity_credential_test3.key",
+        std::ios_base::out | std::ios_base::trunc);
 
     secretFile << "SECRET3";
   }
@@ -862,15 +1198,15 @@ TEST(ManagedIdentityCredential, AzureArc)
       {{"https://azure.com/.default"}, {"https://outlook.com/.default"}, {}},
       {{HttpStatusCode::Unauthorized,
         "",
-        {{"WWW-Authenticate", "ABC ABC=managed_identity_credential_test1.txt"}}},
+        {{"WWW-Authenticate", "ABC ABC=" + keyPath + "managed_identity_credential_test1.key"}}},
        {HttpStatusCode::Ok, "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}", {}},
        {HttpStatusCode::Unauthorized,
         "",
-        {{"WWW-Authenticate", "XYZ XYZ=managed_identity_credential_test2.txt"}}},
+        {{"WWW-Authenticate", "XYZ XYZ=" + keyPath + "managed_identity_credential_test2.key"}}},
        {HttpStatusCode::Ok, "{\"expires_in\":7200, \"access_token\":\"ACCESSTOKEN2\"}", {}},
        {HttpStatusCode::Unauthorized,
         "",
-        {{"WWW-Authenticate", "ABC ABC=managed_identity_credential_test3.txt"}}},
+        {{"WWW-Authenticate", "ABC ABC=" + keyPath + "managed_identity_credential_test3.key"}}},
        {HttpStatusCode::Ok, "{\"expires_in\":9999, \"access_token\":\"ACCESSTOKEN3\"}", {}}});
 
   EXPECT_EQ(actual.Requests.size(), 6U);
@@ -997,6 +1333,37 @@ TEST(ManagedIdentityCredential, AzureArcClientId)
         EXPECT_THROW(
             azureArcManagedIdentityCredential = std::make_unique<ManagedIdentityCredential>(
                 "fedcba98-7654-3210-0123-456789abcdef", options),
+            AuthenticationException);
+
+        return azureArcManagedIdentityCredential;
+      },
+      {},
+      {"{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}"}));
+}
+
+TEST(ManagedIdentityCredential, AzureArcResourceId)
+{
+  using Azure::Core::Credentials::AccessToken;
+  using Azure::Core::Credentials::AuthenticationException;
+
+  static_cast<void>(CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", ""},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", "https://visualstudio.com/"},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", "0123456789abcdef0123456789abcdef01234567"},
+        });
+
+        std::unique_ptr<ManagedIdentityCredential const> azureArcManagedIdentityCredential;
+        EXPECT_THROW(
+            azureArcManagedIdentityCredential = std::make_unique<ManagedIdentityCredential>(
+                ResourceIdentifier("abcdef01-2345-6789-9876-543210fedcba"), options),
             AuthenticationException);
 
         return azureArcManagedIdentityCredential;
@@ -1133,6 +1500,239 @@ TEST(ManagedIdentityCredential, AzureArcAuthHeaderTwoEquals)
       },
       {{"https://azure.com/.default"}},
       {{HttpStatusCode::Unauthorized, "", {{"WWW-Authenticate", "ABC=SECRET1=SECRET2"}}},
+       {HttpStatusCode::Ok, "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}", {}}},
+      [](auto& credential, auto& tokenRequestContext, auto& context) {
+        AccessToken token;
+        EXPECT_THROW(
+            token = credential.GetToken(tokenRequestContext, context), AuthenticationException);
+        return token;
+      }));
+}
+
+TEST(ManagedIdentityCredential, AzureArcInvalidKey)
+{
+  using Azure::Core::Credentials::AccessToken;
+  using Azure::Core::Credentials::AuthenticationException;
+
+  std::string keyPath;
+
+#if defined(AZ_PLATFORM_LINUX)
+  keyPath = "/var/opt/azcmagent/tokens/";
+#elif defined(AZ_PLATFORM_WINDOWS)
+  keyPath = Azure::Core::_internal::Environment::GetVariable("ProgramData");
+  if (keyPath.empty())
+  {
+    GTEST_LOG_(ERROR) << "We can't get ProgramData folder path in AzureArcInvalidKey test.";
+    EXPECT_TRUE(false);
+  }
+  keyPath += "\\AzureConnectedMachineAgent\\Tokens\\";
+#else
+  // Unsupported OS
+  static_cast<void>(CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", ""},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", "https://visualstudio.com/"},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", "0123456789abcdef0123456789abcdef01234567"},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(options);
+      },
+      {{"https://azure.com/.default"}},
+      {{HttpStatusCode::Unauthorized, "", {{"WWW-Authenticate", "ABC ABC=foo.key"}}},
+       {HttpStatusCode::Ok, "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}", {}}},
+      [](auto& credential, auto& tokenRequestContext, auto& context) {
+        AccessToken token;
+        EXPECT_THROW(
+            token = credential.GetToken(tokenRequestContext, context), AuthenticationException);
+        return token;
+      }));
+
+  GTEST_SKIP_("Skipping the rest of AzureArcInvalidKey tests on unsupported OSes.");
+#endif
+
+  // Invalid Key Path - empty directory
+  static_cast<void>(CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", ""},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", "https://visualstudio.com/"},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", "0123456789abcdef0123456789abcdef01234567"},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(options);
+      },
+      {{"https://azure.com/.default"}},
+      {{HttpStatusCode::Unauthorized, "", {{"WWW-Authenticate", "ABC ABC=foo.key"}}},
+       {HttpStatusCode::Ok, "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}", {}}},
+      [](auto& credential, auto& tokenRequestContext, auto& context) {
+        AccessToken token;
+        EXPECT_THROW(
+            token = credential.GetToken(tokenRequestContext, context), AuthenticationException);
+        return token;
+      }));
+
+  // Invalid Key Path - unexpected directory
+  static_cast<void>(CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", ""},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", "https://visualstudio.com/"},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", "0123456789abcdef0123456789abcdef01234567"},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(options);
+      },
+      {{"https://azure.com/.default"}},
+      {{HttpStatusCode::Unauthorized, "", {{"WWW-Authenticate", "ABC ABC=C:\\Foo\\foo.key"}}},
+       {HttpStatusCode::Ok, "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}", {}}},
+      [](auto& credential, auto& tokenRequestContext, auto& context) {
+        AccessToken token;
+        EXPECT_THROW(
+            token = credential.GetToken(tokenRequestContext, context), AuthenticationException);
+        return token;
+      }));
+
+  // Invalid Key Path - unexpected extension, filename is short
+  static_cast<void>(CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", ""},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", "https://visualstudio.com/"},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", "0123456789abcdef0123456789abcdef01234567"},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(options);
+      },
+      {{"https://azure.com/.default"}},
+      {{HttpStatusCode::Unauthorized, "", {{"WWW-Authenticate", "ABC ABC=" + keyPath + "a.b"}}},
+       {HttpStatusCode::Ok, "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}", {}}},
+      [](auto& credential, auto& tokenRequestContext, auto& context) {
+        AccessToken token;
+        EXPECT_THROW(
+            token = credential.GetToken(tokenRequestContext, context), AuthenticationException);
+        return token;
+      }));
+
+  // Invalid Key Path - unexpected extension
+  static_cast<void>(CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", ""},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", "https://visualstudio.com/"},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", "0123456789abcdef0123456789abcdef01234567"},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(options);
+      },
+      {{"https://azure.com/.default"}},
+      {{HttpStatusCode::Unauthorized, "", {{"WWW-Authenticate", "ABC ABC=" + keyPath + "foo.txt"}}},
+       {HttpStatusCode::Ok, "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}", {}}},
+      [](auto& credential, auto& tokenRequestContext, auto& context) {
+        AccessToken token;
+        EXPECT_THROW(
+            token = credential.GetToken(tokenRequestContext, context), AuthenticationException);
+        return token;
+      }));
+
+  // Invalid Key Path - file missing
+  static_cast<void>(CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", ""},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", "https://visualstudio.com/"},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", "0123456789abcdef0123456789abcdef01234567"},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(options);
+      },
+      {{"https://azure.com/.default"}},
+      {{HttpStatusCode::Unauthorized, "", {{"WWW-Authenticate", "ABC ABC=" + keyPath + "foo.key"}}},
+       {HttpStatusCode::Ok, "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}", {}}},
+      [](auto& credential, auto& tokenRequestContext, auto& context) {
+        AccessToken token;
+        EXPECT_THROW(
+            token = credential.GetToken(tokenRequestContext, context), AuthenticationException);
+        return token;
+      }));
+
+  keyPath = CreateDirectoryAndGetKeyPath();
+  if (keyPath.empty())
+  {
+    GTEST_SKIP_("Skipping AzureArcInvalidKey test on unsupported OSes.");
+  }
+
+  {
+    std::ofstream secretFile(keyPath + "toolarge.key", std::ios_base::out | std::ios_base::trunc);
+
+    if (!secretFile.is_open())
+    {
+      GTEST_LOG_(ERROR) << "Failed to create a test file required in AzureArcInvalidKey test.";
+      EXPECT_TRUE(false);
+    }
+
+    std::string fileContents(4097, '.');
+
+    secretFile << fileContents;
+  }
+
+  // Invalid Key Path - file too large
+  static_cast<void>(CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", ""},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", "https://visualstudio.com/"},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", "0123456789abcdef0123456789abcdef01234567"},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(options);
+      },
+      {{"https://azure.com/.default"}},
+      {{HttpStatusCode::Unauthorized,
+        "",
+        {{"WWW-Authenticate", "ABC ABC=" + keyPath + "toolarge.key"}}},
        {HttpStatusCode::Ok, "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}", {}}},
       [](auto& credential, auto& tokenRequestContext, auto& context) {
         AccessToken token;
@@ -1445,6 +2045,96 @@ TEST(ManagedIdentityCredential, ImdsClientId)
   EXPECT_LE(response2.AccessToken.ExpiresOn, response2.LatestExpiration + 4999s);
 }
 
+TEST(ManagedIdentityCredential, ImdsResourceId)
+{
+  auto const actual = CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", ""},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", ""},
+            {"IMDS_ENDPOINT", ""},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", ""},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(
+            ResourceIdentifier("abcdef01-2345-6789-9876-543210fedcba"), options);
+      },
+      {{"https://azure.com/.default"}, {"https://outlook.com/.default"}, {}},
+      std::vector<std::string>{
+          "{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}",
+          "{\"expires_in\":7200, \"access_token\":\"ACCESSTOKEN2\"}",
+          "{\"expires_in\":9999, \"access_token\":\"ACCESSTOKEN3\"}"});
+
+  EXPECT_EQ(actual.Requests.size(), 3U);
+  EXPECT_EQ(actual.Responses.size(), 3U);
+
+  auto const& request0 = actual.Requests.at(0);
+  auto const& request1 = actual.Requests.at(1);
+  auto const& request2 = actual.Requests.at(2);
+
+  auto const& response0 = actual.Responses.at(0);
+  auto const& response1 = actual.Responses.at(1);
+  auto const& response2 = actual.Responses.at(2);
+
+  EXPECT_EQ(request0.HttpMethod, HttpMethod::Get);
+  EXPECT_EQ(request1.HttpMethod, HttpMethod::Get);
+  EXPECT_EQ(request2.HttpMethod, HttpMethod::Get);
+
+  EXPECT_EQ(
+      request0.AbsoluteUrl,
+      "http://169.254.169.254/metadata/identity/oauth2/token"
+      "?api-version=2018-02-01"
+      "&msi_res_id=abcdef01-2345-6789-9876-543210fedcba"
+      "&resource=https%3A%2F%2Fazure.com"); // cspell:disable-line
+
+  EXPECT_EQ(
+      request1.AbsoluteUrl,
+      "http://169.254.169.254/metadata/identity/oauth2/token"
+      "?api-version=2018-02-01"
+      "&msi_res_id=abcdef01-2345-6789-9876-543210fedcba"
+      "&resource=https%3A%2F%2Foutlook.com"); // cspell:disable-line
+
+  EXPECT_EQ(
+      request2.AbsoluteUrl,
+      "http://169.254.169.254/metadata/identity/oauth2/token"
+      "?api-version=2018-02-01"
+      "&msi_res_id=abcdef01-2345-6789-9876-543210fedcba");
+
+  EXPECT_TRUE(request0.Body.empty());
+  EXPECT_TRUE(request1.Body.empty());
+  EXPECT_TRUE(request2.Body.empty());
+
+  {
+    EXPECT_NE(request0.Headers.find("Metadata"), request0.Headers.end());
+    EXPECT_EQ(request0.Headers.at("Metadata"), "true");
+
+    EXPECT_NE(request1.Headers.find("Metadata"), request1.Headers.end());
+    EXPECT_EQ(request1.Headers.at("Metadata"), "true");
+
+    EXPECT_NE(request2.Headers.find("Metadata"), request2.Headers.end());
+    EXPECT_EQ(request2.Headers.at("Metadata"), "true");
+  }
+
+  EXPECT_EQ(response0.AccessToken.Token, "ACCESSTOKEN1");
+  EXPECT_EQ(response1.AccessToken.Token, "ACCESSTOKEN2");
+  EXPECT_EQ(response2.AccessToken.Token, "ACCESSTOKEN3");
+
+  using namespace std::chrono_literals;
+  EXPECT_GE(response0.AccessToken.ExpiresOn, response0.EarliestExpiration + 3600s);
+  EXPECT_LE(response0.AccessToken.ExpiresOn, response0.LatestExpiration + 3600s);
+
+  EXPECT_GE(response1.AccessToken.ExpiresOn, response1.EarliestExpiration + 3600s);
+  EXPECT_LE(response1.AccessToken.ExpiresOn, response1.LatestExpiration + 3600s);
+
+  EXPECT_GE(response2.AccessToken.ExpiresOn, response2.EarliestExpiration + 4999s);
+  EXPECT_LE(response2.AccessToken.ExpiresOn, response2.LatestExpiration + 4999s);
+}
+
 TEST(ManagedIdentityCredential, ImdsCreation)
 {
   auto const actual1 = CredentialTestHelper::SimulateTokenRequest(
@@ -1512,6 +2202,130 @@ TEST(ManagedIdentityCredential, ImdsCreation)
   EXPECT_EQ(
       request2.AbsoluteUrl,
       "http://169.254.169.254/metadata/identity/oauth2/token"
+      "?api-version=2018-02-01"
+      "&client_id=01234567-89ab-cdef-fedc-ba9876543210"
+      "&resource=https%3A%2F%2Foutlook.com"); // cspell:disable-line
+
+  EXPECT_TRUE(request1.Body.empty());
+  EXPECT_TRUE(request2.Body.empty());
+
+  {
+    EXPECT_NE(request1.Headers.find("Metadata"), request1.Headers.end());
+    EXPECT_EQ(request1.Headers.at("Metadata"), "true");
+
+    EXPECT_NE(request2.Headers.find("Metadata"), request2.Headers.end());
+    EXPECT_EQ(request2.Headers.at("Metadata"), "true");
+  }
+
+  EXPECT_EQ(response1.AccessToken.Token, "ACCESSTOKEN1");
+  EXPECT_EQ(response2.AccessToken.Token, "ACCESSTOKEN2");
+
+  using namespace std::chrono_literals;
+  EXPECT_GE(response1.AccessToken.ExpiresOn, response1.EarliestExpiration + 3600s);
+  EXPECT_LE(response1.AccessToken.ExpiresOn, response1.LatestExpiration + 3600s);
+
+  EXPECT_GE(response2.AccessToken.ExpiresOn, response2.EarliestExpiration + 3600s);
+  EXPECT_LE(response2.AccessToken.ExpiresOn, response2.LatestExpiration + 3600s);
+}
+
+TEST(ManagedIdentityCredential, ImdsCustomHost)
+{
+  auto const actual1 = CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", ""},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", "https://visualstudio.com/"},
+            {"IMDS_ENDPOINT", ""},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", ""},
+            {"AZURE_IMDS_CUSTOM_AUTHORITY_HOST", ""},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(
+            "fedcba98-7654-3210-0123-456789abcdef", options);
+      },
+      {{"https://azure.com/.default"}},
+      {"{\"expires_in\":3600, \"access_token\":\"ACCESSTOKEN1\"}"});
+
+  auto const actual2 = CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", ""},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", ""},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", ""},
+            {"AZURE_IMDS_CUSTOM_AUTHORITY_HOST", "https://custom.imds.endpoint/"},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(
+            "01234567-89ab-cdef-fedc-ba9876543210", options);
+      },
+      {{"https://outlook.com/.default"}},
+      {"{\"expires_in\":7200, \"access_token\":\"ACCESSTOKEN2\"}"});
+
+  auto const actual3 = CredentialTestHelper::SimulateTokenRequest(
+      [](auto transport) {
+        TokenCredentialOptions options;
+        options.Transport.Transport = transport;
+
+        CredentialTestHelper::EnvironmentOverride const env({
+            {"MSI_ENDPOINT", ""},
+            {"MSI_SECRET", ""},
+            {"IDENTITY_ENDPOINT", ""},
+            {"IMDS_ENDPOINT", "https://xbox.com/"},
+            {"IDENTITY_HEADER", ""},
+            {"IDENTITY_SERVER_THUMBPRINT", ""},
+            {"AZURE_IMDS_CUSTOM_AUTHORITY_HOST", "http://localhost:59202"},
+        });
+
+        return std::make_unique<ManagedIdentityCredential>(
+            "01234567-89ab-cdef-fedc-ba9876543210", options);
+      },
+      {{"https://outlook.com/.default"}},
+      {"{\"expires_in\":7200, \"access_token\":\"ACCESSTOKEN2\"}"});
+
+  EXPECT_EQ(actual1.Requests.size(), 1U);
+  EXPECT_EQ(actual1.Responses.size(), 1U);
+
+  EXPECT_EQ(actual2.Requests.size(), 1U);
+  EXPECT_EQ(actual2.Responses.size(), 1U);
+
+  auto const& request1 = actual1.Requests.at(0);
+  auto const& response1 = actual1.Responses.at(0);
+
+  auto const& request2 = actual2.Requests.at(0);
+  auto const& response2 = actual2.Responses.at(0);
+
+  EXPECT_EQ(request1.HttpMethod, HttpMethod::Get);
+  EXPECT_EQ(request2.HttpMethod, HttpMethod::Get);
+
+  EXPECT_EQ(
+      request1.AbsoluteUrl,
+      "http://169.254.169.254/metadata/identity/oauth2/token"
+      "?api-version=2018-02-01"
+      "&client_id=fedcba98-7654-3210-0123-456789abcdef"
+      "&resource=https%3A%2F%2Fazure.com"); // cspell:disable-line
+
+  EXPECT_EQ(
+      request2.AbsoluteUrl,
+      "https://custom.imds.endpoint/metadata/identity/oauth2/token"
+      "?api-version=2018-02-01"
+      "&client_id=01234567-89ab-cdef-fedc-ba9876543210"
+      "&resource=https%3A%2F%2Foutlook.com"); // cspell:disable-line
+
+  auto const& request3 = actual3.Requests.at(0);
+  EXPECT_EQ(
+      request3.AbsoluteUrl,
+      "http://localhost:59202/metadata/identity/oauth2/token"
       "?api-version=2018-02-01"
       "&client_id=01234567-89ab-cdef-fedc-ba9876543210"
       "&resource=https%3A%2F%2Foutlook.com"); // cspell:disable-line

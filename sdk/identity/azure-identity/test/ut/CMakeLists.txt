@@ -17,7 +17,9 @@ add_compile_definitions(AZURE_TEST_RECORDING_DIR="${CMAKE_CURRENT_LIST_DIR}")
 add_executable (
   azure-identity-test
     azure_cli_credential_test.cpp
+    azure_pipelines_credential_test.cpp
     chained_token_credential_test.cpp
+    client_assertion_credential_test.cpp
     client_certificate_credential_test.cpp
     client_secret_credential_test.cpp
     credential_test_helper.cpp
@@ -26,6 +28,7 @@ add_executable (
     environment_credential_test.cpp
     macro_guard_test.cpp
     managed_identity_credential_test.cpp
+    resource_identifier_test.cpp
     simplified_header_test.cpp
     tenant_id_resolver_test.cpp
     token_cache_test.cpp

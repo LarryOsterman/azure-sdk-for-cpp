@@ -6,11 +6,14 @@
 #include "private/identity_log.hpp"
 
 #include <azure/core/internal/environment.hpp>
+#include <azure/core/platform.hpp>
 
 #include <fstream>
 #include <iterator>
 #include <stdexcept>
 #include <utility>
+
+#include <sys/stat.h> // for stat() used to check file size
 
 using namespace Azure::Identity::_detail;
 
@@ -29,6 +32,73 @@ void PrintEnvNotSetUpMessage(std::string const& credName, std::string const& cre
       IdentityLog::Level::Verbose,
       credName + ": Environment is not set up for the credential to be created"
           + WithSourceMessage(credSource) + '.');
+}
+
+// ExpectedArcKeyDirectory returns the directory expected to contain Azure Arc keys.
+std::string ExpectedArcKeyDirectory()
+{
+  using Azure::Core::Credentials::AuthenticationException;
+
+#if defined(AZ_PLATFORM_LINUX)
+  return "/var/opt/azcmagent/tokens";
+#elif defined(AZ_PLATFORM_WINDOWS)
+  const std::string programDataPath{
+      Azure::Core::_internal::Environment::GetVariable("ProgramData")};
+  if (programDataPath.empty())
+  {
+    throw AuthenticationException("Unable to get ProgramData folder path.");
+  }
+  return programDataPath + "\\AzureConnectedMachineAgent\\Tokens";
+#else
+  throw AuthenticationException("Unsupported OS. Arc supports only Linux and Windows.");
+#endif
+}
+
+static constexpr off_t MaximumAzureArcKeySize = 4096;
+
+#if defined(AZ_PLATFORM_WINDOWS)
+static constexpr char DirectorySeparator = '\\';
+#else
+static constexpr char DirectorySeparator = '/';
+#endif
+
+// Validates that a given Azure Arc MSI file path is valid for use.
+// The specified file must:
+// - be in the expected directory for the OS
+// - have a .key extension
+// - contain at most 4096 bytes
+void ValidateArcKeyFile(std::string fileName)
+{
+  using Azure::Core::Credentials::AuthenticationException;
+
+  std::string directory;
+  const size_t lastSlashIndex = fileName.rfind(DirectorySeparator);
+  if (std::string::npos != lastSlashIndex)
+  {
+    directory = fileName.substr(0, lastSlashIndex);
+  }
+  if (directory != ExpectedArcKeyDirectory() || fileName.size() < 5
+      || fileName.substr(fileName.size() - 4) != ".key")
+  {
+    throw AuthenticationException(
+        "The file specified in the 'WWW-Authenticate' header in the response from Azure Arc "
+        "Managed Identity Endpoint has an unexpected file path.");
+  }
+
+  struct stat s;
+  if (!stat(fileName.c_str(), &s))
+  {
+    if (s.st_size > MaximumAzureArcKeySize)
+    {
+      throw AuthenticationException(
+          "The file specified in the 'WWW-Authenticate' header in the response from Azure Arc "
+          "Managed Identity Endpoint is larger than 4096 bytes.");
+    }
+  }
+  else
+  {
+    throw AuthenticationException("Failed to get file size for '" + fileName + "'.");
+  }
 }
 } // namespace
 
@@ -70,6 +140,7 @@ template <typename T>
 std::unique_ptr<ManagedIdentitySource> AppServiceManagedIdentitySource::Create(
     std::string const& credName,
     std::string const& clientId,
+    std::string const& resourceId,
     Azure::Core::Credentials::TokenCredentialOptions const& options,
     char const* endpointVarName,
     char const* secretVarName,
@@ -84,6 +155,7 @@ std::unique_ptr<ManagedIdentitySource> AppServiceManagedIdentitySource::Create(
   {
     return std::unique_ptr<ManagedIdentitySource>(new T(
         clientId,
+        resourceId,
         options,
         ParseEndpointUrl(credName, msiEndpoint, endpointVarName, credSource),
         msiSecret));
@@ -95,6 +167,7 @@ std::unique_ptr<ManagedIdentitySource> AppServiceManagedIdentitySource::Create(
 
 AppServiceManagedIdentitySource::AppServiceManagedIdentitySource(
     std::string const& clientId,
+    std::string const& resourceId,
     Azure::Core::Credentials::TokenCredentialOptions const& options,
     Azure::Core::Url endpointUrl,
     std::string const& secret,
@@ -110,9 +183,16 @@ AppServiceManagedIdentitySource::AppServiceManagedIdentitySource(
 
     url.AppendQueryParameter("api-version", apiVersion);
 
+    // Only one of clientId or resourceId will be set to a non-empty value.
+    // AppService uses mi_res_id, and not msi_res_id:
+    // https://learn.microsoft.com/azure/app-service/overview-managed-identity?tabs=portal%2Chttp#rest-endpoint-reference
     if (!clientId.empty())
     {
       url.AppendQueryParameter(clientIdHeaderName, clientId);
+    }
+    else if (!resourceId.empty())
+    {
+      url.AppendQueryParameter("mi_res_id", resourceId);
     }
   }
 
@@ -153,24 +233,28 @@ Azure::Core::Credentials::AccessToken AppServiceManagedIdentitySource::GetToken(
 std::unique_ptr<ManagedIdentitySource> AppServiceV2017ManagedIdentitySource::Create(
     std::string const& credName,
     std::string const& clientId,
+    std::string const& resourceId,
     Core::Credentials::TokenCredentialOptions const& options)
 {
   return AppServiceManagedIdentitySource::Create<AppServiceV2017ManagedIdentitySource>(
-      credName, clientId, options, "MSI_ENDPOINT", "MSI_SECRET", "2017");
+      credName, clientId, resourceId, options, "MSI_ENDPOINT", "MSI_SECRET", "2017");
 }
 
 std::unique_ptr<ManagedIdentitySource> AppServiceV2019ManagedIdentitySource::Create(
     std::string const& credName,
     std::string const& clientId,
+    std::string const& resourceId,
     Core::Credentials::TokenCredentialOptions const& options)
 {
   return AppServiceManagedIdentitySource::Create<AppServiceV2019ManagedIdentitySource>(
-      credName, clientId, options, "IDENTITY_ENDPOINT", "IDENTITY_HEADER", "2019");
+      credName, clientId, resourceId, options, "IDENTITY_ENDPOINT", "IDENTITY_HEADER", "2019");
 }
 
+// Cloud Shell doesn't support user-assigned managed identities
 std::unique_ptr<ManagedIdentitySource> CloudShellManagedIdentitySource::Create(
     std::string const& credName,
     std::string const& clientId,
+    std::string const&,
     Azure::Core::Credentials::TokenCredentialOptions const& options)
 {
   constexpr auto EndpointVarName = "MSI_ENDPOINT";
@@ -245,6 +329,7 @@ Azure::Core::Credentials::AccessToken CloudShellManagedIdentitySource::GetToken(
 std::unique_ptr<ManagedIdentitySource> AzureArcManagedIdentitySource::Create(
     std::string const& credName,
     std::string const& clientId,
+    std::string const& resourceId,
     Azure::Core::Credentials::TokenCredentialOptions const& options)
 {
   using Azure::Core::Credentials::AuthenticationException;
@@ -260,11 +345,11 @@ std::unique_ptr<ManagedIdentitySource> AzureArcManagedIdentitySource::Create(
     return nullptr;
   }
 
-  if (!clientId.empty())
+  if (!clientId.empty() || !resourceId.empty())
   {
     throw AuthenticationException(
         "User assigned identity is not supported by the Azure Arc Managed Identity Endpoint. "
-        "To authenticate with the system assigned identity, omit the client ID "
+        "To authenticate with the system assigned identity, omit the client or resource ID "
         "when constructing the ManagedIdentityCredential.");
   }
 
@@ -278,7 +363,6 @@ AzureArcManagedIdentitySource::AzureArcManagedIdentitySource(
     : ManagedIdentitySource(std::string(), endpointUrl.GetHost(), options),
       m_url(std::move(endpointUrl))
 {
-
   m_url.AppendQueryParameter("api-version", "2019-11-01");
 }
 
@@ -336,7 +420,7 @@ Azure::Core::Credentials::AccessToken AzureArcManagedIdentitySource::GetToken(
           if (authHeader == headers.end())
           {
             throw AuthenticationException(
-                "Did not receive expected WWW-Authenticate header "
+                "Did not receive expected 'WWW-Authenticate' header "
                 "in the response from Azure Arc Managed Identity Endpoint.");
           }
 
@@ -347,12 +431,16 @@ Azure::Core::Credentials::AccessToken AzureArcManagedIdentitySource::GetToken(
               || challenge.find(ChallengeValueSeparator, eq + 1) != std::string::npos)
           {
             throw AuthenticationException(
-                "The WWW-Authenticate header in the response from Azure Arc "
+                "The 'WWW-Authenticate' header in the response from Azure Arc "
                 "Managed Identity Endpoint did not match the expected format.");
           }
 
           auto request = createRequest();
-          std::ifstream secretFile(challenge.substr(eq + 1));
+
+          const std::string fileName = challenge.substr(eq + 1);
+          ValidateArcKeyFile(fileName);
+
+          std::ifstream secretFile(fileName);
           request->HttpRequest.SetHeader(
               "Authorization",
               "Basic "
@@ -368,6 +456,7 @@ Azure::Core::Credentials::AccessToken AzureArcManagedIdentitySource::GetToken(
 std::unique_ptr<ManagedIdentitySource> ImdsManagedIdentitySource::Create(
     std::string const& credName,
     std::string const& clientId,
+    std::string const& resourceId,
     Azure::Core::Credentials::TokenCredentialOptions const& options)
 {
   IdentityLog::Write(
@@ -375,16 +464,28 @@ std::unique_ptr<ManagedIdentitySource> ImdsManagedIdentitySource::Create(
       credName + " will be created" + WithSourceMessage("Azure Instance Metadata Service")
           + ".\nSuccessful creation does not guarantee further successful token retrieval.");
 
-  return std::unique_ptr<ManagedIdentitySource>(new ImdsManagedIdentitySource(clientId, options));
+  std::string imdsHost = "http://169.254.169.254";
+  std::string customImdsHost = Environment::GetVariable("AZURE_IMDS_CUSTOM_AUTHORITY_HOST");
+  if (!customImdsHost.empty())
+  {
+    IdentityLog::Write(
+        IdentityLog::Level::Informational, "Custom IMDS host is set to: " + customImdsHost);
+    imdsHost = customImdsHost;
+  }
+  Azure::Core::Url imdsUrl(imdsHost);
+  imdsUrl.AppendPath("/metadata/identity/oauth2/token");
+
+  return std::unique_ptr<ManagedIdentitySource>(
+      new ImdsManagedIdentitySource(clientId, resourceId, imdsUrl, options));
 }
 
 ImdsManagedIdentitySource::ImdsManagedIdentitySource(
     std::string const& clientId,
+    std::string const& resourceId,
+    Azure::Core::Url const& imdsUrl,
     Azure::Core::Credentials::TokenCredentialOptions const& options)
     : ManagedIdentitySource(clientId, std::string(), options),
-      m_request(
-          Azure::Core::Http::HttpMethod::Get,
-          Azure::Core::Url("http://169.254.169.254/metadata/identity/oauth2/token"))
+      m_request(Azure::Core::Http::HttpMethod::Get, imdsUrl)
 {
   {
     using Azure::Core::Url;
@@ -392,9 +493,16 @@ ImdsManagedIdentitySource::ImdsManagedIdentitySource(
 
     url.AppendQueryParameter("api-version", "2018-02-01");
 
+    // Only one of clientId or resourceId will be set to a non-empty value.
+    // IMDS uses msi_res_id, and not mi_res_id:
+    // https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/how-to-use-vm-token#get-a-token-using-http
     if (!clientId.empty())
     {
       url.AppendQueryParameter("client_id", clientId);
+    }
+    else if (!resourceId.empty())
+    {
+      url.AppendQueryParameter("msi_res_id", resourceId);
     }
   }
 
