@@ -167,6 +167,7 @@ target_include_directories(
       $<INSTALL_INTERFACE:include>
 )
 
+target_compile_definitions(azure-core PRIVATE _azure_BUILDING_SDK)
 if(BUILD_TRANSPORT_REQWEST)
 add_subdirectory(src/http/reqwest)
 endif()
