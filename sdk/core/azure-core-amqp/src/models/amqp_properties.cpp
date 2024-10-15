@@ -236,7 +236,7 @@ namespace Azure { namespace Core { namespace Amqp { namespace Models {
     {
       if (properties_set_to(
               returnValue.get(),
-              _detail::AmqpValueFactory::ToImplementation(properties.To.Value())))
+              static_cast<std::string>(properties.To.Value()).c_str()))
       {
         throw std::runtime_error("Could not set to");
       }
